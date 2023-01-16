@@ -8,6 +8,8 @@ class Letter:
         self.y = y
         self.w = w
         self.h = h
+        self.row = -1
+        self.col = -1
 
     @property
     def cx(self):
