@@ -1,13 +1,14 @@
 from typing import List
 
 class Letter:
-    def __init__(self, idx, letter, x, y, w, h) -> None:
+    def __init__(self, idx, char, x, y, w, h, crop) -> None:
         self.idx = idx
-        self.letter = letter
+        self.char = char
         self.x = x
         self.y = y
         self.w = w
         self.h = h
+        self.crop = crop
         self.row = -1
         self.col = -1
 
@@ -18,6 +19,9 @@ class Letter:
     @property
     def cy(self):
         return self.y + self.h / 2
+
+    def __str__(self) -> str:
+        return self.char
 
 class Word:
     def __init__(self, letters: List[Letter]) -> None:
@@ -37,14 +41,3 @@ class Word:
         y2 = max(max(y1s), max(y2s))
 
         return x1, y1, x2, y2
-
-class Option:   
-    def __init__(self, letter, x, y, w, h) -> None:
-        self.letter = letter
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-
-    def __str__ (self) -> str:
-        return str(self.letter)

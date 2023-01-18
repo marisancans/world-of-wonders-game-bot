@@ -47,9 +47,13 @@ def split_letters(letters, mode):
 
     if mode == "row":
         letters = sorted(letters, key=lambda x: x.row)
+    else:
+        letters = sorted(letters, key=lambda x: x.col)
 
     if mode == "row":
         last_idx = letters[0].row - 1
+    else:
+        last_idx = letters[0].col - 1
 
 
     for letter in letters:
@@ -57,20 +61,65 @@ def split_letters(letters, mode):
             if letter.row - 1 != last_idx:
                 stack.append([])
                 stack_id += 1
+        else:
+            if letter.col - 1!= last_idx:
+                stack.append([])
+                stack_id += 1
 
         stack[stack_id].append(letter)  
-        last_idx = letter.row
+
+        if mode == "row":
+            last_idx = letter.row
+        else:
+            last_idx = letter.col
 
     return stack
 
 
-def get_cells(grid_img):
+def stack_search(letters, idxs_a, idxs_b, mode, grid_img):
+    words: List[Word] = []
+
+    for idx_a in idxs_a:
+        accumulate = []
+
+        for idx_b in idxs_b:
+            if mode == "row":
+                found_letter = find_letter_by_col_row(idx_a, idx_b, letters)
+            else:
+                found_letter = find_letter_by_col_row(idx_b, idx_a, letters)
+
+            if found_letter:
+                accumulate.append(found_letter)
+                # cv2.circle(grid_img, (int(found_letter.cx), int(found_letter.cy)), 10, (0, 0, 255), 5)
+                # helper.show("grid_img", grid_img, 0)
+
+        if len(accumulate) <= 1:
+            continue
+
+        # Col or row can contain multiple words
+        stack = split_letters(accumulate, mode)
+        
+        for s in stack:
+            if len(s) <= 1:
+                continue
+
+            words.append(Word(s))
+
+    return words
+
+def get_words(grid_img):
     # helper.show("img", grid_img, 1)
     gray = cv2.cvtColor(grid_img, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-    helper.show("thresh", thresh, 1)
+    ret, thresh_bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    ret, thresh_dark = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
 
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    comb = thresh_bright + thresh_dark
+    
+    # helper.show("comb", comb, 0)
+    # helper.show("thresh_bright", thresh_bright, 1)
+    # helper.show("thresh_dark", thresh_dark, 1)
+
+    contours, _ = cv2.findContours(comb, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     letters: List[Letter] = []
 
@@ -84,11 +133,12 @@ def get_cells(grid_img):
         if area < area_avg:
             continue
         
-        letter = Letter(idx, "", x, y, w, h)
+        letter_crop = grid_img[y:y + h, x:x + w]
+        letter = Letter(idx, "", x, y, w, h, letter_crop)
         letters.append(letter)
-        cv2.polylines(grid_img, [contour], True, (255, 0, 255), 5)
+        # cv2.polylines(grid_img, [contour], True, (255, 0, 255), 5)
 
-    helper.show("grid_img", grid_img, 1)
+    # helper.show("grid_img", grid_img, 0)
 
 
     avg_w = sum(letter.w for letter in letters) / len(letters)
@@ -109,9 +159,9 @@ def get_cells(grid_img):
     x_mean = np.sort(x_mean)
     y_mean = np.sort(y_mean)
 
-    for xm in x_mean:
-        cv2.line(grid_img, (int(xm), 0), (int(xm), 1000), (255, 255, 0), 5)
-        helper.show("grid_img", grid_img, 1)
+    # for xm in x_mean:
+    #     cv2.line(grid_img, (int(xm), 0), (int(xm), 1000), (255, 255, 0), 5)
+    #     helper.show("grid_img", grid_img, 1)
 
 
     # Assign col
@@ -131,33 +181,12 @@ def get_cells(grid_img):
                 letter.row = row_idx
 
     # Create words from letter grid
-    words: List[Word] = []
-
-    # 
     col_idxs = np.arange(len(x_mean))
     row_idxs = np.arange(len(y_mean))
 
-    for col_idx in col_idxs:
-        col_letters = []
+    words_vertical = stack_search(letters, col_idxs, row_idxs, "row", grid_img)
+    words_horizontal = stack_search(letters, row_idxs, col_idxs, "col", grid_img)
 
-        for row_idx in row_idxs:
-            col_letter = find_letter_by_col_row(col_idx, row_idx, letters)
-
-            if col_letter:
-                col_letters.append(col_letter)
-                cv2.circle(grid_img, (int(col_letter.cx), int(col_letter.cy)), 10, (255, 0, 0), 5)
-                helper.show("grid_img", grid_img, 1)
-
-        if len(col_letters) <= 1:
-            continue
-
-        # Col or row can contain multiple words
-        stack = split_letters(col_letters, "row")
-        
-        for s in stack:
-            if len(s) <= 1:
-                continue
-            
-            words.append(Word(s))
+    words: List[Word] = words_vertical + words_horizontal    
  
     return words
