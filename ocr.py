@@ -30,6 +30,7 @@ def load_dataset(suffx):
     return dataset
 
 
+
 def save_to_dataset(crop_img, text, suffix):
 
     if text.isnumeric():
@@ -72,11 +73,11 @@ def guess_letters(words: List[Word], grid_img):
             letter_crop = cv2.cvtColor(letter_crop, cv2.COLOR_RGB2GRAY)
             ret, letter_crop = cv2.threshold(letter_crop, 200, 255, cv2.THRESH_BINARY)
 
-            letter_crop = cv2.resize(letter_crop, (50, 50))
-            text = pytesseract.image_to_string(letter_crop, lang='eng',config='--psm 10')
-            # print(text)
-            # helper.show("letter_crop", letter_cro)
+            # letter_crop = cv2.resize(letter_crop, (50, 50))
+            text = pytesseract.image_to_string(letter_crop, lang='eng', config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz --psm 10")
             text = text.strip().lower()
+            print(text, np.count_nonzero(letter_crop) / (letter_crop.shape[0] * letter_crop.shape[1]))
+            helper.show("letter_crop", letter_crop)
 
             if config.SAVE_TO_DATASET:
                 save_to_dataset(letter.crop, text, "cells")
@@ -112,11 +113,13 @@ def guess_circle_letters(circle_img):
         char_img_thresh = cv2.copyMakeBorder(char_img_thresh, p, p, p, p, cv2.BORDER_CONSTANT)
         # char_img = cv2.resize(char_img, (50, 50))
 
-        text = pytesseract.image_to_string(char_img_thresh, lang='eng',config='--oem 3 --psm 10')
+        text = pytesseract.image_to_string(char_img_thresh, lang='eng', config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz --psm 10")
         text = text.strip().lower()
         print(text)
-        save_to_dataset(char_img, text, "circle")
-        # helper.show("char_img", char_img)
+        if config.SAVE_TO_DATASET:
+            save_to_dataset(char_img, text, "circle")
+        
+        # helper.show("char_img", char_img_thresh)
 
         option = Letter(len(options), text, x, y, w, h, char_img)
         options.append(option)

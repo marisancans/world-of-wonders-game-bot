@@ -1,2 +1,3 @@
-SAVE_TO_DATASET = True
+SAVE_TO_DATASET = False
 DATASET_PATH = "./dataset"
+DEBUG = True

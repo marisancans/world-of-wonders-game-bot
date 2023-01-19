@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 from structures import Letter, Word
 import helper
-
+import config
 
 def merge_values(values, threshold):
     found = False
@@ -107,17 +107,21 @@ def stack_search(letters, idxs_a, idxs_b, mode, grid_img):
 
     return words
 
-def get_words(grid_img):
-    # helper.show("img", grid_img, 1)
+def get_words(grid_img, grid_img_canvas):
     gray = cv2.cvtColor(grid_img, cv2.COLOR_BGR2GRAY)
-    ret, thresh_bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-    ret, thresh_dark = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
+    ret, thresh_empty = cv2.threshold(gray, 210, 255, cv2.THRESH_BINARY)
+    ret, thresh_occupied_from = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
+    ret, thresh_occupied_to = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
 
-    comb = thresh_bright + thresh_dark
+    thresh_occupied = cv2.bitwise_and(thresh_occupied_to, thresh_occupied_from)
+    thresh_occupied = cv2.bitwise_not(thresh_occupied)
+
+    comb = cv2.bitwise_or(thresh_empty, thresh_occupied)
     
-    # helper.show("comb", comb, 0)
-    # helper.show("thresh_bright", thresh_bright, 1)
-    # helper.show("thresh_dark", thresh_dark, 1)
+    # helper.show("gray", gray, 1)
+    # helper.show("comb", comb, 1)
+    # helper.show("thresh_empty", thresh_empty, 1)
+    # helper.show("thresh_occupied", thresh_occupied, 0)
 
     contours, _ = cv2.findContours(comb, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
@@ -130,16 +134,16 @@ def get_words(grid_img):
         x, y, w, h = cv2.boundingRect(contour)
         area = cv2.contourArea(contour)
 
-        if area < area_avg:
+        if area < 1000: # TODO: Should check standart deviation?
             continue
         
         letter_crop = grid_img[y:y + h, x:x + w]
         letter = Letter(idx, "", x, y, w, h, letter_crop)
         letters.append(letter)
-        # cv2.polylines(grid_img, [contour], True, (255, 0, 255), 5)
+        cv2.polylines(grid_img_canvas, [contour], True, (0, 255, 0), 5)
 
-    # helper.show("grid_img", grid_img, 0)
-
+    if config.DEBUG:
+        helper.show("grid_img", grid_img_canvas, 1)
 
     avg_w = sum(letter.w for letter in letters) / len(letters)
     avg_h = sum(letter.h for letter in letters) / len(letters)
@@ -158,11 +162,6 @@ def get_words(grid_img):
 
     x_mean = np.sort(x_mean)
     y_mean = np.sort(y_mean)
-
-    # for xm in x_mean:
-    #     cv2.line(grid_img, (int(xm), 0), (int(xm), 1000), (255, 255, 0), 5)
-    #     helper.show("grid_img", grid_img, 1)
-
 
     # Assign col
     for col_idx, x in enumerate(x_mean):

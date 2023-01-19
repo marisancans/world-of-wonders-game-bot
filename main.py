@@ -92,18 +92,22 @@ def main():
             base_img = client.get_frame()
         
         grid_img, circle_img = get_img_regions(base_img)
+        grid_img_canvas = grid_img.copy()
 
-        words = grid.get_words(grid_img)
+        words = grid.get_words(grid_img, grid_img_canvas)
         ocr.guess_letters(words, grid_img)
+        return
         options = ocr.guess_circle_letters(circle_img)
 
 
         for word in words:
             x1, y1, x2, y2 = word.bbox
-            o = 15
+            o = 25
 
-            print(len(word.letters))
-            cv2.rectangle(grid_img, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (255, 0, 0), 5)
+            cv2.rectangle(grid_img_canvas, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (0, 0, 0), 8)
+
+            for letter in word.letters:
+                cv2.putText(grid_img_canvas, letter.char, (int(letter.x), int(letter.cy)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 255), 5)
 
         matches = get_possible_matches(possible_words, options)
 
@@ -111,7 +115,7 @@ def main():
             # swipe_guess(match, options, circle_img.copy())
 
         # helper.show("circle_img", circle_img, 1)
-        # helper.show("grid_img", grid_img, 0)
+        helper.show("grid_img", grid_img_canvas, 0)
 
         x = 0
 
