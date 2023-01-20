@@ -108,20 +108,31 @@ def stack_search(letters, idxs_a, idxs_b, mode, grid_img):
     return words
 
 def get_words(grid_img, grid_img_canvas):
-    gray = cv2.cvtColor(grid_img, cv2.COLOR_BGR2GRAY)
-    ret, thresh_empty = cv2.threshold(gray, 210, 255, cv2.THRESH_BINARY)
+    gray = cv2.cvtColor(grid_img, cv2.COLOR_RGB2GRAY)
+
+    # ret, grid_img = cv2.threshold(grid_img, 220, 255, cv2.THRESH_BINARY)
+    # helper.show("grid_img", grid_img)
+
+    ret, thresh_empty_from = cv2.threshold(gray, 220, 255, cv2.THRESH_TRIANGLE)
+    ret, thresh_empty_to = cv2.threshold(gray, 230, 255, cv2.THRESH_OTSU)
+
     ret, thresh_occupied_from = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
     ret, thresh_occupied_to = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
 
-    thresh_occupied = cv2.bitwise_and(thresh_occupied_to, thresh_occupied_from)
+    thresh_occupied = cv2.bitwise_and(thresh_occupied_from, thresh_occupied_to)
     thresh_occupied = cv2.bitwise_not(thresh_occupied)
+
+
+    thresh_empty = cv2.bitwise_and(thresh_empty_from, thresh_empty_to)
 
     comb = cv2.bitwise_or(thresh_empty, thresh_occupied)
     
-    # helper.show("gray", gray, 1)
-    # helper.show("comb", comb, 1)
-    # helper.show("thresh_empty", thresh_empty, 1)
-    # helper.show("thresh_occupied", thresh_occupied, 0)
+    helper.show("thresh_empty_from", thresh_empty_from, 1)
+    helper.show("thresh_empty_to", thresh_empty_to, 1)
+    helper.show("gray", gray, 1)
+    helper.show("comb", comb, 1)
+    helper.show("thresh_empty", thresh_empty, 1)
+    helper.show("thresh_occupied", thresh_occupied, 0)
 
     contours, _ = cv2.findContours(comb, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 

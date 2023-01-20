@@ -9,12 +9,27 @@ import helper
 import phone_client
 import grid
 import ocr
+import re
+import itertools
+import config
+import uuid
+from letter_classification import LitAlphabet, AlphaDataset
+from pytorch_lightning import Trainer
+
+
+
 
 def get_img_regions(screenshot):
     h, w, _ = screenshot.shape
-    grid_img = screenshot[int(h*0.1):int(h*0.5), :]
+    grid_img = screenshot[int(h*0.1):int(h*0.55), :]
+    # helper.show("grid_img", grid_img)
 
     circle_img = screenshot[int(h * 0.57):, :]
+
+    if config.SAVE_TO_DATASET:
+        out = Path("dataset", "grid")
+        out.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(out / f"{uuid.uuid4()}.png"), grid_img)
 
     gray_circle_img = cv2.cvtColor(circle_img, cv2.COLOR_RGB2GRAY)
     ret, thresh_circle_img = cv2.threshold(gray_circle_img, 220, 255, cv2.THRESH_BINARY)
@@ -40,17 +55,16 @@ def get_img_regions(screenshot):
     return grid_img, circle_img
 
 
-def get_possible_matches(possible_words, options):
-    possible_words = [x for x in possible_words if len(x) <= len(options)]
+def get_possible_matches(possible_words, word):
+    possible_words = [x for x in possible_words if len(x) == word.letters]
 
-    filtered = []
-    chars = [o.char for o in options]
+    chars = [x.char for x in word.letters]
 
-    for w in possible_words:
-        if set(w) == set(chars):
-            filtered.append(w)
+    r = re.compile(f'^[{"".join(chars)}]+$')
+    newlist = list(filter(r.match, possible_words)) 
 
-    return filtered
+    print(newlist)
+    return newlist
 
 
 def char_to_option(char, options):
@@ -73,7 +87,18 @@ def swipe_guess(guess, options: List[Letter], circle_img):
 
     # helper.show("circle_img", circle_img)
 
+def get_model(name, version):
+    ds_path = Path(f"./dataset_clean/{name}")
+    model = LitAlphabet.load_from_checkpoint(
+        f"logs_{name}/lightning_logs/version_{version}/checkpoints/best.ckpt",
+        data_dir=ds_path
+    )
+    
+    model = model.eval().cuda()
 
+    alphabet = [x.name for x in sorted(ds_path.iterdir())]
+
+    return model, alphabet
 
 def main():
     possible_words = helper.fs_json_load(Path("words_dictionary.json"))
@@ -81,9 +106,10 @@ def main():
 
     client = phone_client.Client()
 
-    for times in range(10):
-        # base_img = cv2.imread("Screenshot_20230109-151355.png")
+    models = get_model("cells", 0), get_model("circle", 0)
 
+
+    for times in range(10):
         base_img = None
 
         while not isinstance(base_img, np.ndarray):
@@ -95,9 +121,8 @@ def main():
         grid_img_canvas = grid_img.copy()
 
         words = grid.get_words(grid_img, grid_img_canvas)
-        ocr.guess_letters(words, grid_img)
-        return
-        options = ocr.guess_circle_letters(circle_img)
+        ocr.guess_letters(words, grid_img, models)
+        options = ocr.guess_circle_letters(circle_img, models)
 
 
         for word in words:
@@ -109,7 +134,10 @@ def main():
             for letter in word.letters:
                 cv2.putText(grid_img_canvas, letter.char, (int(letter.x), int(letter.cy)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 255), 5)
 
-        matches = get_possible_matches(possible_words, options)
+
+        for word in words:
+            matches = get_possible_matches(possible_words, word)
+            print(matches)
 
         # for match in matches:
             # swipe_guess(match, options, circle_img.copy())
@@ -118,6 +146,7 @@ def main():
         helper.show("grid_img", grid_img_canvas, 0)
 
         x = 0
+
 
     
 if __name__ == "__main__":

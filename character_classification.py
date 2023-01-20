@@ -5,6 +5,7 @@ import torch
 from IPython.core.display import display
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from torch import nn
 from torch.nn import functional as F
@@ -14,28 +15,28 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 import torchvision.models as models
 import cv2
+import numpy as np
+import helper
 from pathlib import Path
 
-BATCH_SIZE = 12
-PATH_DATASETS = "./dataset/cells"
+BATCH_SIZE = 128
+
 
 
 class AlphaDataset(Dataset):
-    def __init__(self, img_dir, transform=None, target_transform=None):
+    def __init__(self, img_dir, transform=None):
         self.img_dir = Path(img_dir)
         self.transform = transform
-        self.target_transform = target_transform
 
         characters = []
         char_dirs = list(self.img_dir.iterdir())
+        char_dirs = sorted(char_dirs, key=lambda x: x.name)
 
 
         for idx, char_type in enumerate(char_dirs):
-            if char_type.name == "unknown":
-                continue
-
             for char_path in char_type.iterdir():
                 img =  cv2.imread(str(char_path))
+                img = helper.resize_with_pad(img, (128, 128))
                 characters.append([idx, char_type.name, img]) 
 
         self.samples = characters
@@ -48,14 +49,12 @@ class AlphaDataset(Dataset):
 
         if self.transform:
             img = self.transform(img)
-        if self.target_transform:
-            label = self.target_transform(label)
         
         return idx, label, img
 
 
 class LitAlphabet(LightningModule):
-    def __init__(self, data_dir=PATH_DATASETS, num_classes=22, learning_rate=2e-4):
+    def __init__(self, data_dir, num_classes=22, learning_rate=0.0001):
 
         super().__init__()
 
@@ -67,7 +66,7 @@ class LitAlphabet(LightningModule):
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Resize((128, 128))
+                # transforms.ColorJitter(brightness=(0.1, 0.2), contrast=(0.1, 0.2), saturation=(0.1, 0.2))
             ]
         )
 
@@ -75,29 +74,35 @@ class LitAlphabet(LightningModule):
         self.model = models.resnet18(pretrained=True)
         self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
 
-        self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
-        self.test_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.test_accuracy = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
         x = self.model(x)
-        return F.log_softmax(x, dim=1)
+        return x
 
     def training_step(self, batch, batch_idx):
         y, label, x = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y)
+        loss = self.criterion(logits, y)
         return loss
 
     def validation_step(self, batch, batch_idx):
         y, label, x = batch
         logits = self(x)
-        loss = F.nll_loss(logits, y)
+        loss = self.criterion(logits, y)
         preds = torch.argmax(logits, dim=1)
         self.val_accuracy.update(preds, y)
 
         # Calling self.log will surface up scalars for you in TensorBoard
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", self.val_accuracy, prog_bar=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        logits = self(batch)
+        preds = torch.argmax(logits, dim=1)
+        return preds
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -114,15 +119,24 @@ class LitAlphabet(LightningModule):
     def val_dataloader(self):
         return DataLoader(self.alpha_val, batch_size=BATCH_SIZE)
 
+def main():
+    model_name = "circle"
+    model = LitAlphabet(f"./dataset_clean/{model_name}")
+
+    trainer = Trainer(
+        accelerator="auto",
+        devices=1 if torch.cuda.is_available() else None,  # limiting got iPython runs
+        max_epochs=20,
+        callbacks=[
+            TQDMProgressBar(refresh_rate=20),
+            ModelCheckpoint(monitor='val_loss', save_top_k=1, filename="best")
+        ],
+        logger=CSVLogger(save_dir=f"logs_{model_name}/"),
+    )
+    trainer.fit(model)
+
+if __name__ == "__main__":
+    main()
 
 
 
-model = LitAlphabet()
-trainer = Trainer(
-    accelerator="auto",
-    devices=1 if torch.cuda.is_available() else None,  # limiting got iPython runs
-    max_epochs=1000,
-    callbacks=[TQDMProgressBar(refresh_rate=20)],
-    logger=CSVLogger(save_dir="logs/"),
-)
-trainer.fit(model)

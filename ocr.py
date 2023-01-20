@@ -13,7 +13,7 @@ from pathlib import Path
 import config
 import uuid
 from skimage.metrics import structural_similarity as compare_ssim
-
+import torch
 
 def load_dataset(suffx):
     here = Path(__file__).parent
@@ -66,26 +66,39 @@ def save_to_dataset(crop_img, text, suffix):
 
     cv2.imwrite(str(out_img), crop_img)
 
-def guess_letters(words: List[Word], grid_img):
+
+def preprocess_img(letter_crop):
+    letter_crop = helper.resize_with_pad(letter_crop, (128, 128))
+    img_t = torch.from_numpy(letter_crop).to(torch.float32) / 255.0
+    img_t = img_t.permute(2, 0, 1)
+    img_t = img_t.unsqueeze(0).cuda()
+    return img_t
+
+def guess_letters(words: List[Word], grid_img, models):
+    model, alphabet = models[0]
+
     for word in words:
         for letter in word.letters:
             letter_crop = letter.crop.copy()
-            letter_crop = cv2.cvtColor(letter_crop, cv2.COLOR_RGB2GRAY)
-            ret, letter_crop = cv2.threshold(letter_crop, 200, 255, cv2.THRESH_BINARY)
+            img_t = preprocess_img(letter_crop)
 
-            # letter_crop = cv2.resize(letter_crop, (50, 50))
-            text = pytesseract.image_to_string(letter_crop, lang='eng', config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz --psm 10")
-            text = text.strip().lower()
-            print(text, np.count_nonzero(letter_crop) / (letter_crop.shape[0] * letter_crop.shape[1]))
-            helper.show("letter_crop", letter_crop)
+            logits =  model.forward(img_t)
+            preds = torch.argmax(logits, dim=1)
+
+            char = alphabet[preds[0]]
+            
+            # print(char)
+            # helper.show("letter_crop", letter_crop)
 
             if config.SAVE_TO_DATASET:
-                save_to_dataset(letter.crop, text, "cells")
+                save_to_dataset(letter.crop, char, "cells")
 
-            letter.char = text           
+            letter.char = char           
 
 
-def guess_circle_letters(circle_img):
+def guess_circle_letters(circle_img, models):
+    model, alphabet = models[1]
+
     gray_circle_img = cv2.cvtColor(circle_img, cv2.COLOR_RGB2GRAY)
     # helper.show("gray_circle_img", gray_circle_img, 1)
     ret, circle_img_thresh = cv2.threshold(gray_circle_img, 100, 255, cv2.THRESH_BINARY)
@@ -99,29 +112,22 @@ def guess_circle_letters(circle_img):
 
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
+        letter_crop = circle_img[y:y+h, x:x+w]
 
-        char_img_thresh = circle_img_thresh[y:y+h, x:x+w]
-        char_img = circle_img[y:y+h, x:x+w]
+        img_t = preprocess_img(letter_crop)
 
-        scale_percent = 50 # percent of original size
-        width = int(char_img_thresh.shape[1] * scale_percent / 100)
-        height = int(char_img_thresh.shape[0] * scale_percent / 100)
-        dim = (width, height)
+        logits =  model.forward(img_t)
+        preds = torch.argmax(logits, dim=1)
 
-        char_img_thresh = cv2.resize(char_img_thresh, dim)
-        p = 20
-        char_img_thresh = cv2.copyMakeBorder(char_img_thresh, p, p, p, p, cv2.BORDER_CONSTANT)
-        # char_img = cv2.resize(char_img, (50, 50))
-
-        text = pytesseract.image_to_string(char_img_thresh, lang='eng', config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz --psm 10")
-        text = text.strip().lower()
-        print(text)
-        if config.SAVE_TO_DATASET:
-            save_to_dataset(char_img, text, "circle")
+        char = alphabet[preds[0]]
+        print(char)
         
-        # helper.show("char_img", char_img_thresh)
+        if config.SAVE_TO_DATASET:
+            save_to_dataset(letter_crop, char, "circle")
+        
+        # helper.show("letter_crop", letter_crop)
 
-        option = Letter(len(options), text, x, y, w, h, char_img)
+        option = Letter(len(options), char, x, y, w, h, letter_crop)
         options.append(option)
 
         
