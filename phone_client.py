@@ -31,4 +31,21 @@ class Client():
         with self.lock:
             return self.last_frame
 
+# def char_to_option(char, options):
+#     for option in options:
+#         if char != option.letter:
+#             continue
+
+#         return option
+    # def swipe_guess(guess, options: List[Letter], circle_img):    
+    #     print("Guessing:", guess)
+
+    #     for previous, current in zip(guess, guess[1:]):
+    #         prev_option = char_to_option(previous, options)
+    #         current_option = char_to_option(current, options)
+    #         cv2.line(circle_img, 
+    #             (prev_option.x + prev_option.w // 2, prev_option.y + prev_option.h // 2), 
+    #             (current_option.x + current_option.w // 2, current_option.y + current_option.h // 2), (255, 0, 0), 2)
+
+    #     # helper.show("circle_img", circle_img)
 
