@@ -13,8 +13,9 @@ import re
 import itertools
 import config
 import uuid
-from letter_classification import LitAlphabet, AlphaDataset
+from character_classification import LitAlphabet, AlphaDataset
 from pytorch_lightning import Trainer
+from words import get_possible_matches
 
 
 
@@ -55,37 +56,6 @@ def get_img_regions(screenshot):
     return grid_img, circle_img
 
 
-def get_possible_matches(possible_words, word):
-    possible_words = [x for x in possible_words if len(x) == word.letters]
-
-    chars = [x.char for x in word.letters]
-
-    r = re.compile(f'^[{"".join(chars)}]+$')
-    newlist = list(filter(r.match, possible_words)) 
-
-    print(newlist)
-    return newlist
-
-
-def char_to_option(char, options):
-    for option in options:
-        if char != option.letter:
-            continue
-
-        return option
-
-
-def swipe_guess(guess, options: List[Letter], circle_img):    
-    print("Guessing:", guess)
-
-    for previous, current in zip(guess, guess[1:]):
-        prev_option = char_to_option(previous, options)
-        current_option = char_to_option(current, options)
-        cv2.line(circle_img, 
-            (prev_option.x + prev_option.w // 2, prev_option.y + prev_option.h // 2), 
-            (current_option.x + current_option.w // 2, current_option.y + current_option.h // 2), (255, 0, 0), 2)
-
-    # helper.show("circle_img", circle_img)
 
 def get_model(name, version):
     ds_path = Path(f"./dataset_clean/{name}")
@@ -100,13 +70,20 @@ def get_model(name, version):
 
     return model, alphabet
 
+
+
+
 def main():
     possible_words = helper.fs_json_load(Path("words_dictionary.json"))
     possible_words = list(possible_words.keys())
 
     client = phone_client.Client()
 
-    models = get_model("cells", 0), get_model("circle", 0)
+    models = {
+        "cell": get_model("cells", 0), 
+        "cicle": get_model("circle", 0),
+        "grid": get_grid_model()
+    }
 
 
     for times in range(10):
