@@ -5,8 +5,6 @@ from typing import List
 
 import math
 import cv2
-import tesserocr
-import pytesseract
 import numpy as np
 import time
 from pathlib import Path
@@ -17,7 +15,7 @@ import torch
 
 def load_dataset(suffx):
     here = Path(__file__).parent
-    path = Path(here, config.DATASET_PATH, suffx)
+    path = Path(here, config.DATASET_DIRTY_PATH, suffx)
 
     dataset = []
 
@@ -40,7 +38,7 @@ def save_to_dataset(crop_img, text, suffix):
     if not text.isalpha():
         text = "unknown"
 
-    out_folder = Path(config.DATASET_PATH, suffix, text)
+    out_folder = Path(config.DATASET_DIRTY_PATH, suffix, text)
     out_folder.mkdir(parents=True, exist_ok=True)
     out_img = out_folder / f"{uuid.uuid4()}.png"
 
@@ -75,7 +73,7 @@ def preprocess_img(letter_crop):
     return img_t
 
 def guess_letters(words: List[Word], grid_img, models):
-    model, alphabet = models[0]
+    model, alphabet = models["cell"]
 
     for word in words:
         for letter in word.letters:
@@ -86,6 +84,8 @@ def guess_letters(words: List[Word], grid_img, models):
             preds = torch.argmax(logits, dim=1)
 
             char = alphabet[preds[0]]
+
+            
             
             # print(char)
             # helper.show("letter_crop", letter_crop)
@@ -93,15 +93,19 @@ def guess_letters(words: List[Word], grid_img, models):
             if config.SAVE_TO_DATASET:
                 save_to_dataset(letter.crop, char, "cells")
 
+            if char == "empty":
+                char = "*"
             letter.char = char           
 
 
 def guess_circle_letters(circle_img, models):
-    model, alphabet = models[1]
+    model, alphabet = models["circle"]
 
     gray_circle_img = cv2.cvtColor(circle_img, cv2.COLOR_RGB2GRAY)
-    # helper.show("gray_circle_img", gray_circle_img, 1)
+    # helper.show("gray_circle_img", gray_circle_img, 0)
     ret, circle_img_thresh = cv2.threshold(gray_circle_img, 100, 255, cv2.THRESH_BINARY)
+    circle_img_thresh = cv2.erode(circle_img_thresh, np.ones((5, 5), np.uint8), iterations=2)
+    circle_img_thresh = cv2.dilate(circle_img_thresh, np.ones((5, 5), np.uint8), iterations=2)
 
     circle_img_thresh = cv2.bitwise_not(circle_img_thresh)
 
@@ -112,6 +116,10 @@ def guess_circle_letters(circle_img, models):
 
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
+
+        if w < 20 or h < 20:
+            continue
+
         letter_crop = circle_img[y:y+h, x:x+w]
 
         img_t = preprocess_img(letter_crop)

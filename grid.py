@@ -4,6 +4,8 @@ import numpy as np
 from structures import Letter, Word
 import helper
 import config
+import torch
+
 
 def merge_values(values, threshold):
     found = False
@@ -107,34 +109,64 @@ def stack_search(letters, idxs_a, idxs_b, mode, grid_img):
 
     return words
 
-def get_words(grid_img, grid_img_canvas):
-    gray = cv2.cvtColor(grid_img, cv2.COLOR_RGB2GRAY)
 
-    # ret, grid_img = cv2.threshold(grid_img, 220, 255, cv2.THRESH_BINARY)
-    # helper.show("grid_img", grid_img)
-
-    ret, thresh_empty_from = cv2.threshold(gray, 220, 255, cv2.THRESH_TRIANGLE)
-    ret, thresh_empty_to = cv2.threshold(gray, 230, 255, cv2.THRESH_OTSU)
-
-    ret, thresh_occupied_from = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
-    ret, thresh_occupied_to = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
-
-    thresh_occupied = cv2.bitwise_and(thresh_occupied_from, thresh_occupied_to)
-    thresh_occupied = cv2.bitwise_not(thresh_occupied)
+def preprocess_img(grid_img):
+    grid_img = cv2.resize(grid_img, (256, 256))
+    img_t = torch.from_numpy(grid_img).to(torch.float32) / 255.0
+    img_t = img_t.permute(2, 0, 1)
+    img_t = img_t.unsqueeze(0).to(config.DEVICE)
+    return img_t
 
 
-    thresh_empty = cv2.bitwise_and(thresh_empty_from, thresh_empty_to)
+def get_words(grid_img, grid_img_canvas, models):
+    model = models["grid"]
 
-    comb = cv2.bitwise_or(thresh_empty, thresh_occupied)
+
+    image = cv2.cvtColor(grid_img, cv2.COLOR_BGR2RGB)
+    image = image.astype(np.float32) / 255.0
+    image = cv2.resize(image, (256, 256))
+    image = np.moveaxis(image, -1, 0)
+    image = torch.from_numpy(image).unsqueeze(0).to(config.DEVICE)
+
+    with torch.no_grad():
+        model.eval()
+        logits = model(image)
+    pr_masks = logits.sigmoid()
+
+    pred_mask = pr_masks.cpu().detach().numpy().squeeze()
+    pred_mask = (pred_mask * 255).astype(np.uint8)
+
+    helper.show("pred_mask", pred_mask, 1)
+
+    h, w, c = grid_img.shape
+    pred_mask = cv2.resize(pred_mask, (w, h))
+
+    grid_img_masked = cv2.bitwise_and(grid_img, grid_img, mask = pred_mask)
+    helper.show("grid_img_masked", grid_img_masked, 1)
+
+    grid_thersh = cv2.cvtColor(grid_img_masked, cv2.COLOR_BGR2GRAY)
+    helper.show("grid_thersh", grid_thersh, 1)
+
+    ret, pred_mask = cv2.threshold(grid_thersh, 90, 255, cv2.THRESH_BINARY)
+
+    helper.show("grid_thersh", grid_thersh, 1)
+
+
+    fin_grid = cv2.bitwise_and(grid_img, grid_img, mask = pred_mask)
+    helper.show("fin_grid", fin_grid, 1)
+    fin_grid = cv2.cvtColor(fin_grid, cv2.COLOR_BGR2GRAY)
+    ret, fin_grid_thresh = cv2.threshold(fin_grid, 0, 255, cv2.THRESH_BINARY)
+
+    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
+    fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
     
-    helper.show("thresh_empty_from", thresh_empty_from, 1)
-    helper.show("thresh_empty_to", thresh_empty_to, 1)
-    helper.show("gray", gray, 1)
-    helper.show("comb", comb, 1)
-    helper.show("thresh_empty", thresh_empty, 1)
-    helper.show("thresh_occupied", thresh_occupied, 0)
 
-    contours, _ = cv2.findContours(comb, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
+    fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
+
+    helper.show("fin_grid_thresh", fin_grid_thresh, 1)
+
+    contours, _ = cv2.findContours(fin_grid_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     letters: List[Letter] = []
 

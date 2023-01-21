@@ -1,7 +1,9 @@
+
 import scrcpy
 import helper
 from adbutils import adb
 from threading import Lock
+import time
 
 class Client():
     def __init__(self):
@@ -12,8 +14,10 @@ class Client():
         adb.connect("127.0.0.1:5555")
         client = scrcpy.Client(device=adb.device_list()[0])
         self.last_frame = None
+        self.work = True
 
         self.lock = Lock()
+
         def on_frame(frame):
             # If you set non-blocking (default) in constructor, the frame event receiver 
             # may receive None to avoid blocking event.

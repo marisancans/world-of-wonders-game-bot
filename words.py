@@ -1,24 +1,57 @@
 import re
+import helper
+from pathlib import Path
+from collections import Counter
 
-def load_words():
-    with open('words_alpha.txt') as word_file:
-        valid_words = set(word_file.read().split())
+def get_possible_matches(possible_words, aviable_chars, pattern):
+    possible_words = [x for x in possible_words if len(x) == len(pattern)]
 
-    return valid_words
+    possible_filtered = []
 
+    for word in possible_words:
+        f = []
 
-def get_possible_matches(possible_words, word):
-    possible_words = [x for x in possible_words if len(x) == word.letters]
+        for char, p in zip(word, pattern):
+            if p == "*":
+                f.append("*")
+                continue
+            else:
+                f.append(char)
 
-    chars = [x.char for x in word.letters]
+        if f == pattern:
+            possible_filtered.append(word)
+            
 
-    r = re.compile(f'^[{"".join(chars)}]+$')
-    newlist = list(filter(r.match, possible_words)) 
+    r = re.compile(f'^[{"".join(aviable_chars)}]+$')
+    newlist = list(filter(r.match, possible_filtered)) 
 
-    print(newlist)
-    return newlist
+    # Does letter count match
+    count_filter = []
+    pattern_count = dict(Counter(aviable_chars))
+
+    for w in newlist:
+        count = dict(Counter(w))
+        f = []
+        
+        for k, v in count.items():
+            f.append(v <= pattern_count[k])
+
+        if all(f):
+            count_filter.append(w)               
+
+    return count_filter
+
+def main():
+    possible_words = helper.fs_json_load(Path("words_dictionary.json"))
+    possible_words = list(possible_words.keys())
+    # chars = [x.char for x in word.letters]
+
+    chars = ["t", "f", "o", "n", "e"]
+
+    word = ["*", "*", "*", "*", "n"]
+
+    matches = get_possible_matches(possible_words, chars, word)
+    print(matches)
 
 if __name__ == '__main__':
-    english_words = load_words()
-    # demo print
-    print('fate' in english_words)
+    main()

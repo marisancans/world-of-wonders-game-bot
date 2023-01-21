@@ -2,7 +2,6 @@ import os
 
 
 import torch
-from IPython.core.display import display
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -125,8 +124,8 @@ def main():
 
     trainer = Trainer(
         accelerator="auto",
-        devices=1 if torch.cuda.is_available() else None,  # limiting got iPython runs
-        max_epochs=20,
+        devices=1 if torch.cuda.is_available() else None,
+        max_epochs=50,
         callbacks=[
             TQDMProgressBar(refresh_rate=20),
             ModelCheckpoint(monitor='val_loss', save_top_k=1, filename="best")

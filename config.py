@@ -1,3 +1,4 @@
 SAVE_TO_DATASET = True
-DATASET_PATH = "./dataset_dirty"
+DATASET_DIRTY_PATH = "./dataset_dirty"
+DEVICE = "cuda"
 DEBUG = True

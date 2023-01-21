@@ -1,15 +1,30 @@
 import os
 import torch
-import matplotlib.pyplot as plt
+
+
+import numpy as np
+import cv2
+
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 
 from pprint import pprint
-from torch.utils.data import DataLoader
-import numpy as np
-import cv2
+
 from pathlib import Path
 from torch.utils.data import DataLoader, random_split
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
+from pytorch_lightning.loggers import CSVLogger
+import config
+import torchvision
+import helper
+
+def preprocess_mask(mask):
+    r, g, b = cv2.split(mask)
+    mask = r + g + b
+    mask = np.clip(mask, 0, 1.0)
+
+    return mask
 
 class SimpleDataset(torch.utils.data.Dataset):
     def __init__(self, root: Path, transform=None):
@@ -31,12 +46,12 @@ class SimpleDataset(torch.utils.data.Dataset):
         image_path = self.images_directory / filename
         mask_path = self.masks_directory / filename
 
-        image = cv2.imread(str(image_path.absolute()))
+        image = cv2.imread(str(image_path.absolute())).astype(np.float32) / 255.0
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        trimap = cv2.imread(str(mask_path.absolute()))
+        trimap = cv2.imread(str(mask_path.absolute())).astype(np.float32) / 255.0
         trimap = cv2.cvtColor(trimap, cv2.COLOR_BGR2RGB)
-        mask = self._preprocess_mask(trimap)
+        mask = preprocess_mask(trimap)
 
         # resize images
         image = cv2.resize(image, (256, 256))
@@ -51,20 +66,9 @@ class SimpleDataset(torch.utils.data.Dataset):
         return image, mask, trimap
 
 
-    @staticmethod
-    def _preprocess_mask(mask):
-        mask = mask.astype(np.float32)
+class GridModel(pl.LightningModule):
 
-        r, g, b = cv2.split(mask)
-        mask = r + g + b
-        mask = np.clip(mask, 0, 1.0)
-
-        return mask
-
-
-class Model(pl.LightningModule):
-
-    def __init__(self, arch, encoder_name, in_channels, out_classes, **kwargs):
+    def __init__(self, arch="FPN", encoder_name="resnet34", in_channels=3, out_classes=1, **kwargs):
         super().__init__()
         self.model = smp.create_model(
             arch, encoder_name=encoder_name, in_channels=in_channels, classes=out_classes, **kwargs
@@ -118,6 +122,13 @@ class Model(pl.LightningModule):
         # apply thresholding
         prob_mask = logits_mask.sigmoid()
         pred_mask = (prob_mask > 0.5).float()
+
+        if config.DEBUG and stage == "valid":
+            bs = image.shape[0]
+            img_gray = torchvision.transforms.functional.rgb_to_grayscale(image)
+            grid = torchvision.utils.make_grid(torch.cat([img_gray, logits_mask, prob_mask, pred_mask]), nrow=bs)
+            grid = grid.permute(1, 2, 0).cpu().detach().numpy()
+            helper.show("grid", grid, 1)
 
         # We will compute IoU metric by two ways
         #   1. dataset-wise
@@ -176,68 +187,77 @@ class Model(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
 
 
-# download data
-root = Path("./dataset/grid")
+def main():
+    root = Path("./dataset_clean/grid")
+
+    dataset = SimpleDataset(root)
+    train_dataset, valid_dataset = random_split(dataset, [0.8, 0.2])
+
+    print(f"Train size: {len(train_dataset)}")
+    print(f"Valid size: {len(valid_dataset)}")
+
+    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=4, shuffle=False)
+
+    model_name = "grid"
+
+    model = GridModel()
+        
+
+    trainer = pl.Trainer(
+        accelerator="auto",
+        devices=1 if torch.cuda.is_available() else None,
+        max_epochs=10,
+        # callbacks=[
+        #     TQDMProgressBar(refresh_rate=20),
+        #     ModelCheckpoint(monitor='valid_dataset_iou', save_top_k=1, filename="best")
+        # ],
+        # logger=CSVLogger(save_dir=f"logs_{model_name}/"),
+        default_root_dir="./logs_grid"
+    )
+
+    trainer.fit(
+        model, 
+        train_dataloaders=train_dataloader, 
+        val_dataloaders=valid_dataloader,
+    )
 
 
-# init train, val, test sets
-dataset = SimpleDataset(root)
-train_dataset, valid_dataset = random_split(dataset, [0.5, 0.5])
+    # run validation dataset
+    valid_metrics = trainer.validate(model, dataloaders=valid_dataloader, verbose=False)
+    pprint(valid_metrics)
 
-# It is a good practice to check datasets don`t intersects with each other
-
-print(f"Train size: {len(train_dataset)}")
-print(f"Valid size: {len(valid_dataset)}")
-
-n_cpu = os.cpu_count()
-train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
-valid_dataloader = DataLoader(valid_dataset, batch_size=2, shuffle=False)
+    return model
 
 
+    image, mask, trimap = next(iter(valid_dataloader))
+    with torch.no_grad():
+        model.eval()
+        logits = model(image)
+    pr_masks = logits.sigmoid()
+
+    import matplotlib.pyplot as plt
+
+    for image, gt_mask, pr_mask in zip(image, mask, pr_masks):
+        plt.figure(figsize=(10, 5))
+
+        plt.subplot(1, 3, 1)
+        plt.imshow(image.numpy().transpose(1, 2, 0))  # convert CHW -> HWC
+        plt.title("Image")
+        plt.axis("off")
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(gt_mask.numpy().squeeze()) # just squeeze classes dim, because we have only one class
+        plt.title("Ground truth")
+        plt.axis("off")
+
+        plt.subplot(1, 3, 3)
+        plt.imshow(pr_mask.numpy().squeeze()) # just squeeze classes dim, because we have only one class
+        plt.title("Prediction")
+        plt.axis("off")
+
+        plt.show()
 
 
-model = Model("FPN", "resnet34", in_channels=3, out_classes=1)
-     
-
-trainer = pl.Trainer(
-    gpus=1, 
-    max_epochs=100,
-)
-
-trainer.fit(
-    model, 
-    train_dataloaders=train_dataloader, 
-    val_dataloaders=valid_dataloader,
-)
-
-
-# run validation dataset
-valid_metrics = trainer.validate(model, dataloaders=valid_dataloader, verbose=False)
-pprint(valid_metrics)
-
-
-image, mask, trimap = next(iter(valid_dataloader))
-with torch.no_grad():
-    model.eval()
-    logits = model(image)
-pr_masks = logits.sigmoid()
-
-for image, gt_mask, pr_mask in zip(image, mask, pr_masks):
-    plt.figure(figsize=(10, 5))
-
-    plt.subplot(1, 3, 1)
-    plt.imshow(image.numpy().transpose(1, 2, 0))  # convert CHW -> HWC
-    plt.title("Image")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 2)
-    plt.imshow(gt_mask.numpy().squeeze()) # just squeeze classes dim, because we have only one class
-    plt.title("Ground truth")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 3)
-    plt.imshow(pr_mask.numpy().squeeze()) # just squeeze classes dim, because we have only one class
-    plt.title("Prediction")
-    plt.axis("off")
-
-    plt.show()
+if __name__ == "__main__":
+    main()
