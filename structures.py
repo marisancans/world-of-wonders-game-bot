@@ -1,5 +1,5 @@
 from typing import List
-
+import cv2
 class Letter:
     def __init__(self, idx, char, x, y, w, h, crop) -> None:
         self.idx = idx
@@ -11,6 +11,7 @@ class Letter:
         self.crop = crop
         self.row = -1
         self.col = -1
+        self.used = False
 
     @property
     def cx(self):
@@ -19,6 +20,7 @@ class Letter:
     @property
     def cy(self):
         return self.y + self.h / 2
+
 
     def __str__(self) -> str:
         return self.char

@@ -20,10 +20,9 @@ import uuid
 
 def get_img_regions(screenshot):
     h, w, _ = screenshot.shape
-    grid_img = screenshot[int(h*0.1):int(h*0.55), :]
+    grid_img = screenshot[int(h*config.CORCLE_OFFSET_UP):int(h*0.55), :]
    
-
-    circle_img = screenshot[int(h * 0.48):, :].copy()
+    circle_img = screenshot[int(h * config.CIRCLE_OFFSET_DOWN):, :].copy()
 
     if config.SAVE_TO_DATASET:
         out = Path(config.DATASET_DIRTY_PATH, "grid")
@@ -98,16 +97,16 @@ def main():
         base_img = None
 
         while not isinstance(base_img, np.ndarray):
+            print("Getting frame")
             time.sleep(1)
 
             base_img = client.get_frame()
-            client.work = False
 
         grid_img, circle_img = get_img_regions(base_img)
         grid_img_canvas = grid_img.copy()
      
         words = grid.get_words(grid_img, grid_img_canvas, models)
-        ocr.guess_letters(words, grid_img, models)
+        ocr.guess_letters(words, grid_img, grid_img_canvas, models)
         options = ocr.guess_circle_letters(circle_img, models)
 
 
@@ -115,32 +114,41 @@ def main():
             x1, y1, x2, y2 = word.bbox
             o = 25
 
-            cv2.rectangle(grid_img_canvas, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (0, 0, 0), 8)
-
-            for letter in word.letters:
-                cv2.putText(grid_img_canvas, letter.char, (int(letter.cx), int(letter.cy)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 5)
+            cv2.rectangle(grid_img_canvas, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (0, 0, 0), 2)
 
 
         for letter in options:
-            cv2.putText(circle_img, letter.char, (int(letter.x + letter.w), int(letter.y + letter.h)), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 127, 0), 10)
+            cv2.putText(circle_img, letter.char.upper(), (int(letter.x + letter.w), int(letter.y + letter.h)), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 127, 0), 10)
 
+        helper.show("circle_img", circle_img, 1)
+        helper.show("grid_img", grid_img_canvas, 1)
 
         aviable_chars = [x.char for x in options]
 
 
         for word in words:
             pattern = [x.char for x in word.letters]
+            
 
-            if not all([x == "*" for x in pattern]):
+            is_skip = all([x != "*" for x in pattern])
+
+            t = str(pattern)
+
+            if is_skip:
+                t += f"{t} skipping"
+
+            print(t)
+
+            if is_skip:
                 continue
 
-            print("pattern:", pattern)
-            
             matches = get_possible_matches(possible_words, aviable_chars, pattern)
             print("matches:", matches)
 
-            # for match in matches:
-                # phone_client.swipe_guess(match, options, circle_img.copy())
+            for match in matches:
+                client.swipe_guess(match, options, base_img)
+            
+            # break
 
         helper.show("circle_img", circle_img, 1)
         helper.show("grid_img", grid_img_canvas, 0)

@@ -157,12 +157,9 @@ def get_words(grid_img, grid_img_canvas, models):
     fin_grid = cv2.cvtColor(fin_grid, cv2.COLOR_BGR2GRAY)
     ret, fin_grid_thresh = cv2.threshold(fin_grid, 0, 255, cv2.THRESH_BINARY)
 
-    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
-    fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
+    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((2, 2), np.uint8), iterations=1)
+    # fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
     
-
-    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
-    fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
 
     helper.show("fin_grid_thresh", fin_grid_thresh, 1)
 

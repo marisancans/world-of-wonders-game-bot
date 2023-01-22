@@ -119,13 +119,13 @@ class LitAlphabet(LightningModule):
         return DataLoader(self.alpha_val, batch_size=BATCH_SIZE)
 
 def main():
-    model_name = "circle"
+    model_name = "cells"
     model = LitAlphabet(f"./dataset_clean/{model_name}")
 
     trainer = Trainer(
         accelerator="auto",
         devices=1 if torch.cuda.is_available() else None,
-        max_epochs=50,
+        max_epochs=500,
         callbacks=[
             TQDMProgressBar(refresh_rate=20),
             ModelCheckpoint(monitor='val_loss', save_top_k=1, filename="best")

@@ -46,9 +46,9 @@ def main():
     possible_words = list(possible_words.keys())
     # chars = [x.char for x in word.letters]
 
-    chars = ["t", "f", "o", "n", "e"]
+    chars = ["s", "t", "a", "t", "e"]
 
-    word = ["*", "*", "*", "*", "n"]
+    word = ["t", "*", "s", "t", "*"]
 
     matches = get_possible_matches(possible_words, chars, word)
     print(matches)

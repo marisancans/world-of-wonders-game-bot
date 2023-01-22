@@ -54,7 +54,6 @@ def save_to_dataset(crop_img, text, suffix):
         crop_gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY)
         
         score = compare_ssim(crop_gray, other_gray)
-        print(score)
 
         if score > 0.95:
             print("The same image detected")
@@ -72,7 +71,7 @@ def preprocess_img(letter_crop):
     img_t = img_t.unsqueeze(0).cuda()
     return img_t
 
-def guess_letters(words: List[Word], grid_img, models):
+def guess_letters(words: List[Word], grid_img, grid_img_canvas, models):
     model, alphabet = models["cell"]
 
     for word in words:
@@ -95,7 +94,10 @@ def guess_letters(words: List[Word], grid_img, models):
 
             if char == "empty":
                 char = "*"
-            letter.char = char           
+            letter.char = char    
+
+            cv2.putText(grid_img_canvas, letter.char.upper(), (int(letter.cx), int(letter.cy)), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 127, 0), 5)
+            helper.show("grid_img", grid_img_canvas, 1 )
 
 
 def guess_circle_letters(circle_img, models):
