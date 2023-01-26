@@ -18,6 +18,7 @@ from pytorch_lightning.loggers import CSVLogger
 import config
 import torchvision
 import helper
+from torchvision.transforms import Compose, RandomCrop 
 
 def preprocess_mask(mask):
     r, g, b = cv2.split(mask)
@@ -54,9 +55,9 @@ class SimpleDataset(torch.utils.data.Dataset):
         mask = preprocess_mask(trimap)
 
         # resize images
-        image = cv2.resize(image, (256, 256))
-        mask = cv2.resize(mask, (256, 256))
-        trimap = cv2.resize(trimap, (256, 256))
+        image = cv2.resize(image, (config.GRID_SEGMENT_SIZE, config.GRID_SEGMENT_SIZE))
+        mask = cv2.resize(mask, (config.GRID_SEGMENT_SIZE, config.GRID_SEGMENT_SIZE))
+        trimap = cv2.resize(trimap, (config.GRID_SEGMENT_SIZE, config.GRID_SEGMENT_SIZE))
 
         # convert to other format HWC -> CHW
         image = np.moveaxis(image, -1, 0)
@@ -82,8 +83,12 @@ class GridModel(pl.LightningModule):
         # for image segmentation dice loss could be the best first choice
         self.loss_fn = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
+        self.transforms = torchvision.transforms.ColorJitter(hue=0.5, brightness=0.1, contrast=0.1, saturation=0.1)
+
+
     def forward(self, image):
         # normalize image here
+        image = self.transforms(image)
         image = (image - self.mean) / self.std
         mask = self.model(image)
         return mask
@@ -110,7 +115,8 @@ class GridModel(pl.LightningModule):
         assert mask.ndim == 4
 
         # Check that mask values in between 0 and 1, NOT 0 and 255 for binary segmentation
-        assert mask.max() <= 1.0 and mask.min() >= 0
+        assert mask.max() <= 1.0 and mask.min() >= 0    
+
 
         logits_mask = self.forward(image)
         
@@ -184,7 +190,7 @@ class GridModel(pl.LightningModule):
         return self.shared_epoch_end(outputs, "valid")
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.0001)
+        return torch.optim.Adam(self.parameters(), lr=0.001)
 
 
 def main():
@@ -196,18 +202,19 @@ def main():
     print(f"Train size: {len(train_dataset)}")
     print(f"Valid size: {len(valid_dataset)}")
 
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=4, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=4, shuffle=False, num_workers=4)
 
     model_name = "grid"
 
-    model = GridModel()
+    pretrained_path = "logs_grid/lightning_logs/version_10/checkpoints/epoch=33-step=476.ckpt"
+    model = GridModel.load_from_checkpoint(pretrained_path)
         
 
     trainer = pl.Trainer(
         accelerator="auto",
         devices=1 if torch.cuda.is_available() else None,
-        max_epochs=10,
+        max_epochs=500,
         # callbacks=[
         #     TQDMProgressBar(refresh_rate=20),
         #     ModelCheckpoint(monitor='valid_dataset_iou', save_top_k=1, filename="best")

@@ -1,14 +1,13 @@
 from typing import List
 import cv2
 class Letter:
-    def __init__(self, idx, char, x, y, w, h, crop) -> None:
+    def __init__(self, idx, char, x, y, w, h) -> None:
         self.idx = idx
         self.char = char
         self.x = x
         self.y = y
         self.w = w
         self.h = h
-        self.crop = crop
         self.row = -1
         self.col = -1
         self.used = False

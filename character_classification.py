@@ -53,7 +53,7 @@ class AlphaDataset(Dataset):
 
 
 class LitAlphabet(LightningModule):
-    def __init__(self, data_dir, num_classes=22, learning_rate=0.0001):
+    def __init__(self, data_dir, learning_rate=0.0001):
 
         super().__init__()
 
@@ -61,11 +61,14 @@ class LitAlphabet(LightningModule):
         self.data_dir = data_dir
         self.learning_rate = learning_rate
 
+        num_classes = len(list(Path(data_dir).iterdir()))
+        print("num_classes:", num_classes)
+
         # Hardcode some dataset specific attributes
         self.transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.ColorJitter(brightness=(0.1, 0.2), contrast=(0.1, 0.2), saturation=(0.1, 0.2))
+                transforms.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.05, hue=0.5),
             ]
         )
 
@@ -125,10 +128,10 @@ def main():
     trainer = Trainer(
         accelerator="auto",
         devices=1 if torch.cuda.is_available() else None,
-        max_epochs=500,
+        max_epochs=200,
         callbacks=[
             TQDMProgressBar(refresh_rate=20),
-            ModelCheckpoint(monitor='val_loss', save_top_k=1, filename="best")
+            ModelCheckpoint(save_top_k=1, filename="best")
         ],
         logger=CSVLogger(save_dir=f"logs_{model_name}/"),
     )

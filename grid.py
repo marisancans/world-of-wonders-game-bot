@@ -110,21 +110,13 @@ def stack_search(letters, idxs_a, idxs_b, mode, grid_img):
     return words
 
 
-def preprocess_img(grid_img):
-    grid_img = cv2.resize(grid_img, (256, 256))
-    img_t = torch.from_numpy(grid_img).to(torch.float32) / 255.0
-    img_t = img_t.permute(2, 0, 1)
-    img_t = img_t.unsqueeze(0).to(config.DEVICE)
-    return img_t
-
-
 def get_words(grid_img, grid_img_canvas, models):
     model = models["grid"]
 
 
     image = cv2.cvtColor(grid_img, cv2.COLOR_BGR2RGB)
     image = image.astype(np.float32) / 255.0
-    image = cv2.resize(image, (256, 256))
+    image = cv2.resize(image, (config.GRID_SEGMENT_SIZE, config.GRID_SEGMENT_SIZE))
     image = np.moveaxis(image, -1, 0)
     image = torch.from_numpy(image).unsqueeze(0).to(config.DEVICE)
 
@@ -135,30 +127,24 @@ def get_words(grid_img, grid_img_canvas, models):
 
     pred_mask = pr_masks.cpu().detach().numpy().squeeze()
     pred_mask = (pred_mask * 255).astype(np.uint8)
+    ret, pred_mask = cv2.threshold(pred_mask, 250, 255, cv2.THRESH_BINARY)
 
-    helper.show("pred_mask", pred_mask, 1)
+    # helper.show("pred_mask", pred_mask, 1)
 
     h, w, c = grid_img.shape
     pred_mask = cv2.resize(pred_mask, (w, h))
 
     grid_img_masked = cv2.bitwise_and(grid_img, grid_img, mask = pred_mask)
-    helper.show("grid_img_masked", grid_img_masked, 1)
+    # helper.show("grid_img_masked", grid_img_masked, 1)
 
     grid_thersh = cv2.cvtColor(grid_img_masked, cv2.COLOR_BGR2GRAY)
-    helper.show("grid_thersh", grid_thersh, 1)
-
-    ret, pred_mask = cv2.threshold(grid_thersh, 90, 255, cv2.THRESH_BINARY)
-
-    helper.show("grid_thersh", grid_thersh, 1)
+    # helper.show("grid_thersh", grid_thersh, 1)
 
 
-    fin_grid = cv2.bitwise_and(grid_img, grid_img, mask = pred_mask)
-    helper.show("fin_grid", fin_grid, 1)
+    fin_grid = cv2.bitwise_and(grid_img, grid_img, mask = grid_thersh)
+    # helper.show("fin_grid", fin_grid, 1)
     fin_grid = cv2.cvtColor(fin_grid, cv2.COLOR_BGR2GRAY)
     ret, fin_grid_thresh = cv2.threshold(fin_grid, 0, 255, cv2.THRESH_BINARY)
-
-    fin_grid_thresh = cv2.dilate(fin_grid_thresh, np.ones((2, 2), np.uint8), iterations=1)
-    # fin_grid_thresh = cv2.erode(fin_grid_thresh, np.ones((5, 5), np.uint8), iterations=1)
     
 
     helper.show("fin_grid_thresh", fin_grid_thresh, 1)
@@ -168,19 +154,18 @@ def get_words(grid_img, grid_img_canvas, models):
     letters: List[Letter] = []
 
     areas = [cv2.contourArea(cnt) for cnt in contours]
-    area_avg = np.array(areas).mean()
 
     for idx, contour in enumerate(contours):
         x, y, w, h = cv2.boundingRect(contour)
         area = cv2.contourArea(contour)
 
-        if area < 1000: # TODO: Should check standart deviation?
+        if area < 3000: # TODO: Should check standart deviation?
             continue
         
-        letter_crop = grid_img[y:y + h, x:x + w]
-        letter = Letter(idx, "", x, y, w, h, letter_crop)
+        letter = Letter(idx, "", x, y, w, h)
         letters.append(letter)
-        cv2.polylines(grid_img_canvas, [contour], True, (0, 255, 0), 5)
+        # cv2.polylines(grid_img_canvas, [contour], True, (0, 255, 0), 5)
+        cv2.rectangle(grid_img_canvas, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
     if config.DEBUG:
         helper.show("grid_img", grid_img_canvas, 1)

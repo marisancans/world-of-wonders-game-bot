@@ -162,6 +162,8 @@ class Client():
            
 
         self.client.control.touch(x_end, y_end, scrcpy.ACTION_UP)
+        self.client.control.touch(0, 0, scrcpy.ACTION_DOWN)
+        self.client.control.touch(0, 0, scrcpy.ACTION_UP)
         helper.show("swiper", debug, 1)
 
         for o in options:

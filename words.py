@@ -3,7 +3,8 @@ import helper
 from pathlib import Path
 from collections import Counter
 
-def get_possible_matches(possible_words, aviable_chars, pattern):
+
+def get_possible_matches(possible_words, aviable_chars, pattern, words):
     possible_words = [x for x in possible_words if len(x) == len(pattern)]
 
     possible_filtered = []
@@ -21,7 +22,6 @@ def get_possible_matches(possible_words, aviable_chars, pattern):
         if f == pattern:
             possible_filtered.append(word)
             
-
     r = re.compile(f'^[{"".join(aviable_chars)}]+$')
     newlist = list(filter(r.match, possible_filtered)) 
 
@@ -37,18 +37,31 @@ def get_possible_matches(possible_words, aviable_chars, pattern):
             f.append(v <= pattern_count[k])
 
         if all(f):
-            count_filter.append(w)               
+            count_filter.append(w)      
 
-    return count_filter
+    not_present = []
+    present = []
+
+    # Such a word is already guessed
+    for word in words:
+        c = [l.char for l in word.letters]
+        present.append("".join(c))
+        
+    for w in count_filter:
+        if w in present:
+            continue
+        not_present.append(w)
+
+    return not_present
 
 def main():
     possible_words = helper.fs_json_load(Path("words_dictionary.json"))
     possible_words = list(possible_words.keys())
     # chars = [x.char for x in word.letters]
 
-    chars = ["s", "t", "a", "t", "e"]
+    chars = ["n", "n", "b", "i", "e", "g"]
 
-    word = ["t", "*", "s", "t", "*"]
+    word = ["*", "e", "*", "*", "g"]
 
     matches = get_possible_matches(possible_words, chars, word)
     print(matches)
