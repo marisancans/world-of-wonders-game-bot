@@ -70,7 +70,7 @@ def get_grid_model(name, version, ckpt_name):
 # Check if victory or claim screen
 def check_buttons(client):
     base_img = client.get_frame()
-    helper.show("base_img", base_img, 0)
+    helper.show("base_img", base_img, 1)
 
     def check_level():
         gray = cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
@@ -93,19 +93,25 @@ def check_buttons(client):
 
     def check_claim():
         gray = cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
-        ret, thresh = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
-        claim_crop = thresh[1723:1784, 437:648]
-        helper.show("claim_crop", claim_crop)
-        cv2.imwrite("claim.png", claim_crop)
+
+        ret, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+        claim_crop = thresh[1835:1950, 372:744]
+        helper.show("claim_crop", claim_crop, 1)
+        # helper.show("thresh", thresh)
+        # cv2.imwrite("claim.png", claim_crop)
         claim_truth = cv2.imread("claim.png", cv2.IMREAD_GRAYSCALE)
 
-        avg = np.average(claim_crop)
+        diff = cv2.absdiff(claim_crop, claim_truth)
+        helper.show("diff", diff, 1)
+        avg = np.average(diff)
 
-        if avg > 180 and avg < 190:
-            client.client.control.touch(540, 1884, scrcpy.ACTION_DOWN)
-            client.client.control.touch(540, 1884, scrcpy.ACTION_UP)
+        if avg < 5:
+            print("Clicking claim button")
+            client.client.control.touch(544, 1913, scrcpy.ACTION_DOWN)
+            client.client.control.touch(544, 1913, scrcpy.ACTION_UP)
             time.sleep(10)
             check_level()
+            return True
 
 
     check_claim()
@@ -119,67 +125,58 @@ def type_words(models, client, words, options, possible_words):
 
     tried = []
 
-    base_img = client.get_frame()
-    grid_img = get_img_regions(base_img)
-    grid_img_canvas = grid_img.copy()
-
-    ocr.guess_letters(words, grid_img, grid_img_canvas, models)
-
+    # Try larger words first 
+    words = sorted(words, key=lambda x: len(x))
     
-
-    while True:
-        if check_buttons(client):
-            break
-
-        alive = False 
+    for word in words:
+        pattern = [x.char for x in word.letters]
         
-        for word in words:
-            pattern = [x.char for x in word.letters]
-            
-            is_skip = all([x != "*" for x in pattern])
+        is_skip = all([x != "*" for x in pattern])
 
-            t = f"Pattern: {pattern}"
+        t = f"Pattern: {pattern}"
 
-            if is_skip:
-                t += f"{t} skipping"
+        if is_skip:
+            t += f"{t} skipping"
 
-            print(t)
+        print(t)
 
-            if is_skip:
+        if is_skip:
+            continue
+        
+        print("Getting matches...")
+        matches = get_possible_matches(possible_words, aviable_chars, pattern, words)
+
+        if not matches:
+            continue
+
+        for idx, match in enumerate(matches):
+            if match in tried:
                 continue
-            
-            print("Getting matches...")
-            matches = get_possible_matches(possible_words, aviable_chars, pattern, words)
 
-            if not matches:
-                continue
+            base_img = client.get_frame()
+            grid_img = get_img_regions(base_img)
+            grid_img_canvas = grid_img.copy()
+        
+            ocr.guess_letters(words, grid_img, grid_img_canvas, models)
+            new_pattern = [x.char for x in word.letters]
 
-            for match in matches:
-                if match in tried:
-                    continue
+            # Word state updated
+            if new_pattern != pattern:
+                print("Pattern updated")
+                break
 
-                base_img = client.get_frame()
-                grid_img = get_img_regions(base_img)
-                grid_img_canvas = grid_img.copy()
+            print(idx, "/", len(matches), "Guessing:", match)
+            client.swipe_guess(match, options, base_img)
+            tried.append(match)
 
-                client.swipe_guess(match, options, base_img)
-                tried.append(match)
 
-                ocr.guess_letters(words, grid_img, grid_img_canvas, models)
-                alive = True
-
-                if check_buttons(client):
-                    alive = False
-                    return
-
-            if not alive:
+            if check_buttons(client):
                 return
+            
+        print("All matches tried")
+    print("All words tried")
+    return
 
-        if not alive:
-            return
-
-    if not alive:
-        return
 
 def main():
     cv2.startWindowThread()
@@ -191,7 +188,7 @@ def main():
     models = {
         "cell": get_alpha_model("cells", 0, "best-v1.ckpt"), 
         "circle": get_alpha_model("circle", 0, "best-v1.ckpt"),
-        "grid": get_grid_model("grid", 10, "epoch=33-step=476.ckpt")
+        "grid": get_grid_model("grid", 0, "best-v1.ckpt")
     }
 
 
@@ -208,19 +205,14 @@ def main():
         while True:   
             check_buttons(client)
 
+            base_img = client.get_frame()
             grid_img = get_img_regions(base_img)
             circle_img = get_circle_region(base_img)
             grid_img_canvas = grid_img.copy()
         
             words = grid.get_words(grid_img, grid_img_canvas, models)
+            ocr.guess_letters(words, grid_img, grid_img_canvas, models)
             options = ocr.guess_circle_letters(circle_img, models)
-
-            
-            for word in words:
-                x1, y1, x2, y2 = word.bbox
-                o = 25
-
-                cv2.rectangle(grid_img_canvas, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (0, 0, 0), 2)
 
             type_words(models, client, words, options, possible_words)
 

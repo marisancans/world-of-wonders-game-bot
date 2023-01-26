@@ -122,7 +122,7 @@ class LitAlphabet(LightningModule):
         return DataLoader(self.alpha_val, batch_size=BATCH_SIZE)
 
 def main():
-    model_name = "cells"
+    model_name = "circle"
     model = LitAlphabet(f"./dataset_clean/{model_name}")
 
     trainer = Trainer(

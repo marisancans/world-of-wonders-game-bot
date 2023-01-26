@@ -21,6 +21,9 @@ def get_possible_matches(possible_words, aviable_chars, pattern, words):
 
         if f == pattern:
             possible_filtered.append(word)
+
+    if not aviable_chars:
+        return []
             
     r = re.compile(f'^[{"".join(aviable_chars)}]+$')
     newlist = list(filter(r.match, possible_filtered)) 

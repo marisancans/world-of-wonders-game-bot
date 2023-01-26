@@ -99,8 +99,6 @@ class Client():
 
 
     def swipe_guess(self, guess, options, base_img):    
-        print("Guessing:", guess)
-
         h, w, _ = base_img.shape
 
     

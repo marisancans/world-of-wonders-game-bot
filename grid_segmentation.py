@@ -207,8 +207,9 @@ def main():
 
     model_name = "grid"
 
-    pretrained_path = "logs_grid/lightning_logs/version_10/checkpoints/epoch=33-step=476.ckpt"
-    model = GridModel.load_from_checkpoint(pretrained_path)
+    # pretrained_path = "logs_grid/lightning_logs/version_10/checkpoints/epoch=33-step=476.ckpt"
+    # model = GridModel.load_from_checkpoint(pretrained_path)
+    model = GridModel()
         
 
     trainer = pl.Trainer(

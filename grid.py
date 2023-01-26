@@ -170,6 +170,9 @@ def get_words(grid_img, grid_img_canvas, models):
     if config.DEBUG:
         helper.show("grid_img", grid_img_canvas, 1)
 
+    if not letters:
+        return []
+
     avg_w = sum(letter.w for letter in letters) / len(letters)
     avg_h = sum(letter.h for letter in letters) / len(letters)
 
@@ -212,5 +215,14 @@ def get_words(grid_img, grid_img_canvas, models):
     words_horizontal = stack_search(letters, row_idxs, col_idxs, "col", grid_img)
 
     words: List[Word] = words_vertical + words_horizontal    
- 
+
+    for word in words:
+        x1, y1, x2, y2 = word.bbox
+        o = 25
+
+        cv2.rectangle(grid_img_canvas, (int(x1 + o), int(y1 + o)), (int(x2 - o), int(y2 - o)), (0, 0, 0), 2)
+
+    if config.DEBUG:
+        helper.show("grid_img", grid_img_canvas, 1)
+
     return words
