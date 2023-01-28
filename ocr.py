@@ -44,6 +44,10 @@ def save_to_dataset(dataset, crop_img, text, suffix):
         # Due to image compression they can differ, so check structural similarity instead
         other_gray = cv2.cvtColor(other_char_img, cv2.COLOR_RGB2GRAY)
         crop_gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY)
+
+        h, w = crop_gray.shape
+        if h < 7 or w < 7:
+            continue
         
         score = compare_ssim(crop_gray, other_gray)
 
@@ -140,7 +144,7 @@ def guess_circle_letters(circle_img, models):
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
 
-        if w < 20 or h < 20:
+        if w < 5 or h < 20:
             continue
 
         letter_crop = circle_img[y:y+h, x:x+w]

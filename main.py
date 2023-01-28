@@ -95,23 +95,27 @@ def check_buttons(client):
         gray = cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
 
         ret, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        claim_crop = thresh[1835:1950, 372:744]
-        helper.show("claim_crop", claim_crop, 1)
-        # helper.show("thresh", thresh)
-        # cv2.imwrite("claim.png", claim_crop)
-        claim_truth = cv2.imread("claim.png", cv2.IMREAD_GRAYSCALE)
 
-        diff = cv2.absdiff(claim_crop, claim_truth)
-        helper.show("diff", diff, 1)
-        avg = np.average(diff)
+        for i, ((y_from, y_to), (x_from, x_to)) in enumerate([[[1727, 1791], [372, 744]], [[1866, 1921],[372, 744]]]):
+            claim_crop = thresh[y_from:y_to, x_from:x_to]
+            
+            helper.show("thresh", thresh, 1)
+            # cv2.imwrite("claim2.png", claim_crop)
+            claim_truth = cv2.imread(f"claim{i}.png", cv2.IMREAD_GRAYSCALE)
+            helper.show("claim_crop", claim_crop, 1)
+            helper.show("claim_truth", claim_truth, 1)
 
-        if avg < 5:
-            print("Clicking claim button")
-            client.client.control.touch(544, 1913, scrcpy.ACTION_DOWN)
-            client.client.control.touch(544, 1913, scrcpy.ACTION_UP)
-            time.sleep(10)
-            check_level()
-            return True
+            diff = cv2.absdiff(claim_crop, claim_truth)
+            helper.show("diff", diff, 1)
+            avg = np.average(diff)
+
+            if avg < 5:
+                print("Clicking claim button")
+                client.client.control.touch(x_from, y_from, scrcpy.ACTION_DOWN)
+                client.client.control.touch(x_from, y_from, scrcpy.ACTION_UP)
+                time.sleep(10)
+                check_level()
+                return True
 
 
     check_claim()
@@ -126,7 +130,10 @@ def type_words(models, client, words, options, possible_words):
     tried = []
 
     # Try larger words first 
-    words = sorted(words, key=lambda x: len(x))
+    words = sorted(words, reverse=True, key=lambda x: len(x.letters))
+
+    # Try words which has some letters guessed already
+    words = sorted(words, reverse=True, key=lambda x: sum([True for l in x.letters if l != "*"]))
     
     for word in words:
         pattern = [x.char for x in word.letters]
@@ -188,7 +195,7 @@ def main():
     models = {
         "cell": get_alpha_model("cells", 0, "best-v1.ckpt"), 
         "circle": get_alpha_model("circle", 0, "best-v1.ckpt"),
-        "grid": get_grid_model("grid", 0, "best-v1.ckpt")
+        "grid": get_grid_model("grid", 10, "best-v1.ckpt")
     }
 
 
@@ -215,6 +222,7 @@ def main():
             options = ocr.guess_circle_letters(circle_img, models)
 
             type_words(models, client, words, options, possible_words)
+            time.sleep(3)
 
 
                 
